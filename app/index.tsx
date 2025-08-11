@@ -1,8 +1,9 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
+import { setCapturedImageBase64 } from '@/lib/captureStore';
 
 export default function CameraScreen() {
   const cameraRef = useRef<CameraView | null>(null);
@@ -20,11 +21,17 @@ export default function CameraScreen() {
     if (!cameraRef.current || isCapturing) return;
     try {
       setIsCapturing(true);
-      // @ts-expect-error: CameraView ref has takePictureAsync in expo-camera
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.9, skipProcessing: true });
-      const uri: string | undefined = photo?.uri ?? photo?.assets?.[0]?.uri;
-      if (uri) {
-        router.push({ pathname: 'modal', params: { uri } });
+      const camera = cameraRef.current as unknown as {
+        takePictureAsync: (options?: { quality?: number; base64?: boolean; skipProcessing?: boolean }) => Promise<{ uri: string; base64?: string }>;
+      };
+      const photo = await camera.takePictureAsync({ quality: 0.9, base64: true, skipProcessing: true });
+      const base64: string | undefined = photo?.base64;
+      if (base64) {
+        setCapturedImageBase64(base64);
+        router.push('/modal');
+      } else {
+        const uri: string | undefined = photo?.uri;
+        router.push({ pathname: '/modal', params: { uri } });
       }
     } finally {
       setIsCapturing(false);
