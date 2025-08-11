@@ -30,6 +30,30 @@ export function clearTokens() {
   state.refreshToken = undefined;
 }
 
+export async function loginWithGoogleIdToken(idToken: string): Promise<TokenPair> {
+  const res = await fetch(`${API_BASE_URL}/auth/google-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken }),
+    // Follow redirect so we can read the final URL containing tokens
+    redirect: 'follow',
+  });
+  const finalUrl = (res.url ?? '').toString();
+  try {
+    const url = new URL(finalUrl);
+    const accessToken = url.searchParams.get('accessToken') ?? undefined;
+    const refreshToken = url.searchParams.get('refreshToken') ?? undefined;
+    if (!accessToken || !refreshToken) {
+      throw new Error('Missing tokens in redirect URL');
+    }
+    const tokens: TokenPair = { accessToken, refreshToken };
+    setTokens(tokens);
+    return tokens;
+  } catch (e) {
+    throw new Error('Google login failed');
+  }
+}
+
 export async function loginTestUser(email?: string): Promise<TokenPair> {
   const body = { email: email ?? `user@example.com` };
   const res = await fetch(`${API_BASE_URL}/auth/test-user`, {
@@ -69,11 +93,10 @@ export async function ensureAccessToken(): Promise<string> {
     try {
       return await refreshAccessToken();
     } catch (_) {
-      // fall through to login
+      // fall through
     }
   }
-  const { accessToken } = await loginTestUser();
-  return accessToken;
+  throw new Error('Not authenticated');
 }
 
 

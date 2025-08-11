@@ -1,14 +1,29 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import { setCapturedImageBase64 } from '@/lib/captureStore';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+import { GOOGLE_ANDROID_CLIENT_ID, GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID } from '@/lib/config';
+import { loginWithGoogleIdToken, getAccessToken } from '@/lib/auth';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function CameraScreen() {
   const cameraRef = useRef<CameraView | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [request, response, promptAsync] = Google.useAuthRequest(
+    {
+      iosClientId: GOOGLE_IOS_CLIENT_ID,
+      androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+      webClientId: GOOGLE_WEB_CLIENT_ID,
+    },
+    { useProxy: true }
+  );
 
   const hasPermission = permission?.granted === true;
   const canAskAgain = permission?.canAskAgain !== false;
@@ -37,6 +52,38 @@ export default function CameraScreen() {
       setIsCapturing(false);
     }
   }, [isCapturing]);
+
+  useEffect(() => {
+    async function handleResponse() {
+      if (response?.type !== 'success') return;
+      const idToken = response.authentication?.idToken ?? response.params?.id_token;
+      if (!idToken) return;
+      setIsSigningIn(true);
+      try {
+        await loginWithGoogleIdToken(idToken);
+      } finally {
+        setIsSigningIn(false);
+      }
+    }
+    handleResponse();
+  }, [response]);
+
+  const isAuthenticated = !!getAccessToken();
+
+  const onSignIn = useCallback(() => {
+    promptAsync();
+  }, [promptAsync]);
+
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaView style={styles.authContainer}>
+        <Text style={styles.brandTitle}>GPT-5 Math</Text>
+        <TouchableOpacity style={styles.googleBtn} onPress={onSignIn} disabled={isSigningIn}>
+          {isSigningIn ? <ActivityIndicator color="#000" /> : <Text style={styles.googleBtnText}>Sign in with Google</Text>}
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   if (!hasPermission) {
     return (
@@ -71,6 +118,29 @@ export default function CameraScreen() {
 }
 
 const styles = StyleSheet.create({
+  authContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
+    gap: 16,
+    padding: 24,
+  },
+  brandTitle: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  googleBtn: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  googleBtnText: {
+    color: '#000',
+    fontWeight: '600',
+  },
   container: {
     flex: 1,
     backgroundColor: '#000',
