@@ -21,8 +21,7 @@ export default function CameraScreen() {
       iosClientId: GOOGLE_IOS_CLIENT_ID,
       androidClientId: GOOGLE_ANDROID_CLIENT_ID,
       webClientId: GOOGLE_WEB_CLIENT_ID,
-    },
-    { useProxy: true }
+    }
   );
 
   const hasPermission = permission?.granted === true;
