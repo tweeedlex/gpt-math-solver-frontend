@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Image, Platform } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import { setCapturedImageBase64 } from '@/lib/captureStore';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import * as AuthSession from 'expo-auth-session';
 import { GOOGLE_ANDROID_CLIENT_ID, GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID } from '@/lib/config';
 import { loginWithGoogleIdToken, loginTestUser, getAccessToken } from '@/lib/auth';
+import { API_BASE_URL } from '@/lib/config';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -17,14 +19,12 @@ export default function CameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [isCapturing, setIsCapturing] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
-  // const [request, response, promptAsync] = Google.useAuthRequest(
-  //   {
-  //     iosClientId: GOOGLE_IOS_CLIENT_ID,
-  //     androidClientId: GOOGLE_ANDROID_CLIENT_ID,
-  //     webClientId: GOOGLE_WEB_CLIENT_ID,
-  //   }
-  // );
+  const redirectUri = `${API_BASE_URL}/auth/google-login`
 
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: GOOGLE_WEB_CLIENT_ID,
+    redirectUri,
+  });
   const hasPermission = permission?.granted === true;
   const canAskAgain = permission?.canAskAgain !== false;
 
@@ -80,27 +80,29 @@ export default function CameraScreen() {
     }
   }, []);
 
-  // useEffect(() => {
-  //   async function handleResponse() {
-  //     if (response?.type !== 'success') return;
-  //     const idToken = response.authentication?.idToken ?? response.params?.id_token;
-  //     if (!idToken) return;
-  //     setIsSigningIn(true);
-  //     try {
-  //       await loginWithGoogleIdToken(idToken);
-  //     } finally {
-  //       setIsSigningIn(false);
-  //     }
-  //   }
-  //   handleResponse();
-  // }, [response]);
+  useEffect(() => {
+    async function handleResponse() {
+      console.log("response", response);
+      if (response?.type !== 'success') return;
+      const idToken = response.authentication?.idToken ?? response.params?.id_token;
+      if (!idToken) return;
+      setIsSigningIn(true);
+      try {
+        await loginWithGoogleIdToken(idToken);
+      } finally {
+        setIsSigningIn(false);
+      }
+    }
+    handleResponse();
+  }, [response]);
 
   const isAuthenticated = !!getAccessToken();
 
   const onSignIn = useCallback(async () => {
     setIsSigningIn(true);
     try {
-      await loginTestUser();
+      // await loginTestUser();
+      promptAsync();
     } finally {
       setIsSigningIn(false);
     }
