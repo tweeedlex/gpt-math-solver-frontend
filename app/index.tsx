@@ -10,7 +10,6 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
 import { GOOGLE_ANDROID_CLIENT_ID, GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID } from '@/lib/config';
 import { loginWithGoogleIdToken, loginTestUser, getAccessToken } from '@/lib/auth';
-import { API_BASE_URL } from '@/lib/config';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -19,10 +18,13 @@ export default function CameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [isCapturing, setIsCapturing] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const redirectUri = `${API_BASE_URL}/auth/google-login`
+  const redirectUri = AuthSession.makeRedirectUri({ useProxy: true, scheme: 'myapp' });
+  console.log('Google redirectUri:', redirectUri);
 
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: GOOGLE_WEB_CLIENT_ID,
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    clientId: GOOGLE_WEB_CLIENT_ID!,
+    iosClientId: GOOGLE_IOS_CLIENT_ID,
+    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
     redirectUri,
   });
   const hasPermission = permission?.granted === true;
@@ -82,9 +84,10 @@ export default function CameraScreen() {
 
   useEffect(() => {
     async function handleResponse() {
-      console.log("response", response);
+      console.log("Google auth response:", response);
       if (response?.type !== 'success') return;
       const idToken = response.authentication?.idToken ?? response.params?.id_token;
+      console.log('Google idToken present:', Boolean(idToken), 'len:', idToken?.length);
       if (!idToken) return;
       setIsSigningIn(true);
       try {
@@ -99,21 +102,23 @@ export default function CameraScreen() {
   const isAuthenticated = !!getAccessToken();
 
   const onSignIn = useCallback(async () => {
+    // Wait until the auth request is initialized
+    if (!request) return;
     setIsSigningIn(true);
     try {
       // await loginTestUser();
-      promptAsync();
+      await promptAsync();
     } finally {
       setIsSigningIn(false);
     }
-  }, []);
+  }, [request, promptAsync]);
 
   if (!isAuthenticated) {
     return (
       <SafeAreaView style={styles.authContainer}>
         <Text style={styles.brandTitle}>GPT-5 Math</Text>
-        <TouchableOpacity style={styles.googleBtn} onPress={onSignIn} disabled={isSigningIn}>
-          {isSigningIn ? <ActivityIndicator color="#000" /> : <Text style={styles.googleBtnText}>Sign in with Google</Text>}
+        <TouchableOpacity style={styles.googleBtn} onPress={onSignIn} disabled={isSigningIn || !request}>
+          {isSigningIn || !request ? <ActivityIndicator color="#000" /> : <Text style={styles.googleBtnText}>Sign in with Google</Text>}
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -276,5 +281,3 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
 });
-
-

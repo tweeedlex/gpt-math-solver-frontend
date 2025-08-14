@@ -86,6 +86,40 @@ export default function ModalScreen() {
           setSolution('ERROR: No image');
           return;
         }
+        // If value is a data URL, strip the prefix and capture mime
+        let inferredMime: string | undefined;
+        const dataUrlMatch = /^data:([^;]+);base64,(.*)$/i.exec(base64);
+        if (dataUrlMatch) {
+          inferredMime = dataUrlMatch[1]?.toLowerCase();
+          base64 = dataUrlMatch[2] ?? '';
+          console.log('Stripped data URL prefix. Inferred mime:', inferredMime);
+        }
+
+        // Sanitize base64 (remove whitespace/newlines) and ensure proper padding
+        const base64Clean = base64.replace(/\s+/g, '');
+        const ensureBase64Padding = (s: string) => {
+          const r = s.length % 4;
+          if (r === 0) return s;
+          if (r === 2) return s + '==';
+          if (r === 3) return s + '=';
+          // r === 1 is invalid, but try to pad anyway
+          return s + '===';
+        };
+        const base64Padded = ensureBase64Padding(base64Clean);
+        const base64CharOk = /^[A-Za-z0-9+/]+={0,2}$/.test(base64Padded);
+        // Detect mime from magic numbers when possible
+        const looksPng = base64Padded.startsWith('iVBOR'); // PNG
+        const looksJpg = base64Padded.startsWith('/9j/');  // JPEG
+        const mime = inferredMime ?? (looksPng ? 'image/png' : looksJpg ? 'image/jpeg' : (uri?.toString().toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg'));
+        const dataUrl = `data:${mime};base64,${base64Padded}`;
+        console.log('Image base64 length:', base64Padded.length, 'mime:', mime, 'mod4:', base64Padded.length % 4, 'prefix:', base64Padded.slice(0, 16), 'b64charsOk:', base64CharOk);
+
+        if (!base64CharOk || (!looksPng && !looksJpg)) {
+          console.log('Unsupported or invalid base64 image format. Expected JPEG or PNG.');
+          setStatus('error');
+          setSolution('ERROR: Unsupported image format. Please use a JPEG or PNG image (try taking a photo with the camera).');
+          return;
+        }
         const token = await ensureAccessToken();
         console.log("token", token);
         const wsUrl = `${WS_BASE_URL}/ws/calculate${token ? `?token=${encodeURIComponent(token)}` : ''}`;
@@ -95,7 +129,13 @@ export default function ModalScreen() {
 
         ws.onopen = () => {
           setStatus('sending');
-          ws.send(JSON.stringify({ action: 'solve', image: base64 }));
+          // Send only the expected field for backend: image (raw base64)
+          const payload = {
+            action: 'solve',
+            image: base64Padded,
+          } as const;
+          console.log('WS solve payload keys:', Object.keys(payload), 'image length:', base64Padded.length);
+          ws.send(JSON.stringify(payload));
           setStatus('streaming');
         };
         ws.onmessage = (event) => {

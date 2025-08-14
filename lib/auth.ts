@@ -5,9 +5,19 @@ export type TokenPair = {
   refreshToken: string;
 };
 
+export type UserInfo = {
+  id: string;
+  email: string;
+  name: string | null;
+  avatar: string | null;
+  credits: number;
+  subscriptionExpiresAt: string | null;
+};
+
 type AuthState = {
   accessToken?: string;
   refreshToken?: string;
+  user?: UserInfo;
 };
 
 const state: AuthState = {};
@@ -28,30 +38,35 @@ export function getRefreshToken(): string | undefined {
 export function clearTokens() {
   state.accessToken = undefined;
   state.refreshToken = undefined;
+  state.user = undefined;
 }
 
-export async function loginWithGoogleIdToken(idToken: string): Promise<TokenPair> {
-  const res = await fetch(`${API_BASE_URL}/auth/google-login`, {
+export async function loginWithGoogleIdToken(idToken: string): Promise<{ tokens: TokenPair; user: UserInfo }> {
+  const form = new URLSearchParams();
+  // Send both keys for backend compatibility
+  form.set('idToken', idToken);
+  form.set('credential', idToken);
+  const url = new URL(`${API_BASE_URL}/auth/google-login`);
+  // Also pass as query to satisfy either location
+  url.searchParams.set('idToken', idToken);
+  const res = await fetch(url.toString(), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idToken }),
-    // Follow redirect so we can read the final URL containing tokens
-    redirect: 'follow',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: form.toString(),
   });
-  const finalUrl = (res.url ?? '').toString();
-  try {
-    const url = new URL(finalUrl);
-    const accessToken = url.searchParams.get('accessToken') ?? undefined;
-    const refreshToken = url.searchParams.get('refreshToken') ?? undefined;
-    if (!accessToken || !refreshToken) {
-      throw new Error('Missing tokens in redirect URL');
-    }
-    const tokens: TokenPair = { accessToken, refreshToken };
-    setTokens(tokens);
-    return tokens;
-  } catch (e) {
-    throw new Error('Google login failed');
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Google login failed: ${res.status} ${text}`);
   }
+  const data = await res.json();
+  const tokens: TokenPair = {
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken,
+  };
+  const user: UserInfo = data.user;
+  setTokens(tokens);
+  state.user = user;
+  return { tokens, user };
 }
 
 export async function loginTestUser(email?: string): Promise<TokenPair> {
@@ -99,4 +114,6 @@ export async function ensureAccessToken(): Promise<string> {
   throw new Error('Not authenticated');
 }
 
-
+export function getUser(): UserInfo | undefined {
+  return state.user;
+}
