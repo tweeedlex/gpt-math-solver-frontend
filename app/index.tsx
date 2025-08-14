@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import { setCapturedImageBase64 } from '@/lib/captureStore';
@@ -51,6 +52,33 @@ export default function CameraScreen() {
       setIsCapturing(false);
     }
   }, [isCapturing]);
+
+  const onPickImage = useCallback(async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (permissionResult.granted === false) {
+      alert('Permission to access camera roll is required!');
+      return;
+    }
+
+    const pickerResult = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 1,
+      base64: true,
+    });
+
+    if (pickerResult.canceled) {
+      return;
+    }
+
+    const base64 = pickerResult.assets?.[0].base64;
+    if (base64) {
+      setCapturedImageBase64(base64);
+      router.push('/modal');
+    } else {
+      alert('Could not get base64 from image.');
+    }
+  }, []);
 
   // useEffect(() => {
   //   async function handleResponse() {
@@ -113,9 +141,17 @@ export default function CameraScreen() {
       </View>
 
       <View style={styles.controls}>
-        <TouchableOpacity style={[styles.captureButton, isCapturing && styles.captureDisabled]} onPress={onCapture} disabled={isCapturing}>
-          {isCapturing ? <ActivityIndicator color="#000" /> : <View style={styles.captureInner} />}
-        </TouchableOpacity>
+        <View style={styles.buttonsContainer}>
+          <TouchableOpacity style={styles.galleryButton} onPress={onPickImage}>
+            <Image source={require('../assets/images/gallery.png')} style={styles.galleryIcon} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.captureButton, isCapturing && styles.captureDisabled]} onPress={onCapture} disabled={isCapturing}>
+            {isCapturing ? <ActivityIndicator color="#000" /> : <View style={styles.captureInner} />}
+          </TouchableOpacity>
+
+          <View style={styles.placeholder} />
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -196,8 +232,29 @@ const styles = StyleSheet.create({
   },
   controls: {
     paddingVertical: 24,
+    paddingHorizontal: 24,
+  },
+  buttonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  galleryButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  galleryIcon: {
+    width: 24,
+    height: 24,
+    tintColor: '#fff',
+  },
+  placeholder: {
+    width: 48,
+    height: 48,
   },
   captureButton: {
     width: 74,
