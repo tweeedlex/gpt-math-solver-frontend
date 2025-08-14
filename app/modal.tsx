@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { Platform, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Platform, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { useLocalSearchParams, router } from 'expo-router';
 import * as FileSystem from 'expo-file-system';
@@ -7,14 +7,16 @@ import { ensureAccessToken } from '@/lib/auth';
 import { WS_BASE_URL } from '@/lib/config';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getCapturedImageBase64, clearCapturedImageBase64 } from '@/lib/captureStore';
+import MathView from 'react-native-math-view';
 
 export default function ModalScreen() {
   const { uri } = useLocalSearchParams<{ uri?: string }>();
-  const [status, setStatus] = useState<'idle' | 'connecting' | 'sending' | 'streaming' | 'done' | 'error'>(
-    'idle',
-  );
+  const [status, setStatus] = useState<'idle' | 'connecting' | 'sending' | 'streaming' | 'done' | 'error'>('idle');
+  const statusRef = useRef(status);
+  statusRef.current = status;
   const [solution, setSolution] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
+
 
   useEffect(() => {
     async function run() {
@@ -65,7 +67,9 @@ export default function ModalScreen() {
           setStatus('error');
         };
         ws.onclose = () => {
-          if (status !== 'done' && status !== 'error') setStatus('error');
+          if (statusRef.current !== 'done' && statusRef.current !== 'error') {
+            setStatus('error');
+          }
         };
         } catch (e) {
         console.log("error", e);
@@ -80,6 +84,31 @@ export default function ModalScreen() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uri]);
+
+  // const parsedSolution = useMemo(() => {
+  //   if (!solution) return [];
+  //   const regex = /(\$\$[\s\S]*?\$\$|\\[[\s\S]*?\\]|\(.*?\)|\$.*?\$)/g;
+  //   return solution
+  //     .split(regex)
+  //     .filter(Boolean)
+  //     .map((part, index) => {
+  //       const isMath = /^(\$|\\|\().*(\$|\\|\))$/.test(part);
+  //       if (isMath) {
+  //         let math = part;
+  //         if (part.startsWith('$$') && part.endsWith('$$')) {
+  //           math = part.substring(2, part.length - 2);
+  //         } else if (part.startsWith('\\[') && part.endsWith('\\]')) {
+  //           math = part.substring(2, part.length - 2);
+  //         } else if (part.startsWith('\\(') && part.endsWith('\\)')) {
+  //           math = part.substring(2, part.length - 2);
+  //         } else if (part.startsWith('$') && part.endsWith('$')) {
+  //           math = part.substring(1, part.length - 1);
+  //         }
+  //         return { type: 'math', value: math, key: `part-${index}` };
+  //       }
+  //       return { type: 'text', value: part, key: `part-${index}` };
+  //     });
+  // }, [solution]);
 
   return (
     <View style={styles.container}>
@@ -96,7 +125,9 @@ export default function ModalScreen() {
             </Text>
           </>
         ) : null}
-        <Text style={styles.solutionText}>{solution.trim()}</Text>
+        <ScrollView style={styles.solutionScrollView}>
+          <Text style={styles.solutionText}>{solution}</Text>
+        </ScrollView>
         {status === 'error' && solution.length === 0 ? (
           <Text style={styles.errorText}>Failed to solve. Please try again.</Text>
         ) : null}
@@ -130,6 +161,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     padding: 16,
     gap: 12,
+  },
+  solutionScrollView: {
+    flex: 1,
+  },
+  solutionContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  mathViewWrapper: {
+    marginVertical: 4,
+  },
+  mathView: {
+    backgroundColor: 'transparent',
+    color: '#fff',
   },
   solutionText: {
     color: '#fff',
