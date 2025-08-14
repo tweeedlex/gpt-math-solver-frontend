@@ -7,7 +7,7 @@ import { ensureAccessToken } from '@/lib/auth';
 import { WS_BASE_URL } from '@/lib/config';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getCapturedImageBase64, clearCapturedImageBase64 } from '@/lib/captureStore';
-import { WebView } from 'react-native-webview';
+import WebView from '@/components/WebViewWrapper';
 import katex from 'katex';
 
 export default function ModalScreen() {
